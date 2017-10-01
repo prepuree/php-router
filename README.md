@@ -13,7 +13,7 @@ RewriteRule ^ api.php [L]
 api.php
 ```php
 require 'Router.php';
-$router -> new Router();
+$router = new Router();
 
 $router -> get('/hello/<string>', function($name){
   echo 'Hello, '.$name;
