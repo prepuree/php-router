@@ -15,9 +15,9 @@
       
 		public function __call($method, $args) {
 			if(isset($this -> namespace))
-				$args[2] = $this -> namespace.$args[0];
+				$args[0] = $this -> namespace.$args[0];
 			if(in_array($method, $this -> methods))
-				$this -> addRoute($method, $args[2], $args[0], $args[1]);
+				$this -> addRoute($method, $args[0], $args[1]);
     }
     
 		public function group($suffix, $callback) {
@@ -32,7 +32,7 @@
     
 		public function guard($callback) {
 			foreach($this -> routes as $index => $route) {
-				if(strstr(explode($route['baseUrl'], $route['url'])[0], $this -> lastGroupNamespace))
+				if(strstr($route['url'], $this -> lastGroupNamespace))
 					array_push($this -> routes[$index]['guards'], $callback);
 			}
 
@@ -64,11 +64,10 @@
 			http_response_code(404);
     }
     
-		private function addRoute($method, $url, $baseUrl, $callback) {
+		private function addRoute($method, $url, $callback) {
 			array_push($this -> routes, [
 				'method' => strtoupper($method),
 				'url' => $url,
-				'baseUrl' => $baseUrl,
 				'callback' => $callback,
 				'guards' => []
 			]);
@@ -77,7 +76,16 @@
 		private function loadRoute($route, $args = []) {
 			$access = true;
 			foreach($route['guards'] as $guard) {
-				$access = call_user_func($guard);
+				if(is_callable($guard)) {
+					$access = call_user_func($guard);
+				} else if(is_bool($guard)) {
+					$access = $guard;
+				} else if(is_string($guard)) {
+					$access = $this -> loadClass($guard);
+				} else {
+					$access = false;
+				}
+
 				if($access === false) break;
 			}
 
@@ -91,7 +99,7 @@
 			}
     }
 
-		private function loadClass($callback, $args) {
+		private function loadClass($callback, $args = []) {
       $attrs = explode('::', $callback);
       $classNamespace = str_replace('/', '\\', $attrs[0]);
       $method = $attrs[1];
