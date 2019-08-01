@@ -1,10 +1,9 @@
 <?php
 	class Router {
-		private $methods = ['get', 'post'];
+		private $methods = ['get', 'post', 'put', 'delete'];
 		private $routes = [];
-		private $guards = [];
+		private $lastGroupNamespace;
 		private $namespace;
-		private $lastNamespace;
 		private $patterns = [
 			'<all>' => '([^/]+)',
 			'<int>' => '([0-9]+)',
@@ -12,100 +11,93 @@
 			'<char>' => '([a-zA-Z0-9_]+)',
 			'<url>' => '([a-zA-Z0-9_-]+)',
 			'<*>' => '(.*)'
-		];
-
-		public function __construct(){}
-
-		public function __call($method, $args){
-			if(count($args) !== 2)
-				return;
-
-			if(isset($this -> namespace)){
-				$args[0] = $this -> namespace.$args[0];
-			}
-
+    ];
+      
+		public function __call($method, $args) {
+			if(isset($this -> namespace))
+				$args[2] = $this -> namespace.$args[0];
 			if(in_array($method, $this -> methods))
-				$this -> addRoute($method, $args[0], $args[1]);
-		}
-
-		public function group($prefix, $callback){
-			if(is_callable($callback)){
-				$prefix = $this -> namespace .= $prefix;
-				$this -> lastNamespace = $prefix;
+				$this -> addRoute($method, $args[2], $args[0], $args[1]);
+    }
+    
+		public function group($suffix, $callback) {
+			if(is_callable($callback)) {
+				$this -> lastGroupNamespace = $this -> namespace .= $suffix;
 				call_user_func($callback, $this);
-				$this -> namespace = $this -> namespacePrev($this -> namespace);
-			}
+				$this -> namespace = explode($suffix, $this -> namespace)[0];
+      }
 
 			return $this;
-		}
+    }
+    
+		public function guard($callback) {
+			foreach($this -> routes as $index => $route) {
+				if(strstr(explode($route['baseUrl'], $route['url'])[0], $this -> lastGroupNamespace))
+					array_push($this -> routes[$index]['guards'], $callback);
+			}
 
-		public function guard($callback){
-			array_push($this -> guards, [
-				'uri' => $this -> lastNamespace,
-				'callback' => $callback
-			]);
-		}
-
-		public function run(){
+			$this -> lastGroupNamespace = $this -> namespace;
+    }
+    
+		public function run() {
 			$routes = [];
-			foreach($this -> routes as $route){
+			foreach($this -> routes as $route) {
 				if($route['method'] == $_SERVER['REQUEST_METHOD'])
-					if($route['uri'] == $_SERVER['REQUEST_URI']){
+					if($route['url'] == $_SERVER['REQUEST_URI']) {
 						$this -> loadRoute($route);
 						return;
 					}
 					array_push($routes, $route);
-			}
-
+      }
+      
 			$searches = array_keys($this -> patterns);
 			$replaces = array_values($this -> patterns);
-
-			foreach($routes as $route){
-				$uri = str_replace($searches ,$replaces, $route['uri']);
-				if(preg_match('#^' . $uri . '$#', $_SERVER['REQUEST_URI'], $matched)){
+			foreach($routes as $route) {
+        $url = str_replace($searches ,$replaces, $route['url']);
+				if(preg_match('#^' . $url . '$#', $_SERVER['REQUEST_URI'], $matched)) {
 					unset($matched[0]);
 					$this -> loadRoute($route, $matched);
 					return;
 				}
-			}
-
-			echo '404';
-		}
-
-		private function addRoute($method, $route, $args){
+      }
+      
+			http_response_code(404);
+    }
+    
+		private function addRoute($method, $url, $baseUrl, $callback) {
 			array_push($this -> routes, [
 				'method' => strtoupper($method),
-				'uri' => $route,
-				'callback' => $args
+				'url' => $url,
+				'baseUrl' => $baseUrl,
+				'callback' => $callback,
+				'guards' => []
 			]);
-		}
+    }
 
-		private function loadRoute($route, $args = []){
+		private function loadRoute($route, $args = []) {
 			$access = true;
-			foreach($this -> guards as $guard){
-				if($guard['uri'] == $this -> namespacePrev($route['uri']))
-					$access = call_user_func($guard['callback']);
+			foreach($route['guards'] as $guard) {
+				$access = call_user_func($guard);
+				if($access === false) break;
 			}
-			if($access){
-				if(is_array($route['callback']))
-					$this -> loadClass($route['callback'][0], $route['callback'][1], $args);
+
+			if($access) {
+        if(is_string($route['callback']))
+					$this -> loadClass($route['callback'], $args);
 				elseif(is_callable($route['callback']))
 					call_user_func_array($route['callback'], $args);
 			} else {
-				echo 'access denied';
+				http_response_code(403);
 			}
-		}
+    }
 
-		private function loadClass($class, $method, $args){
-			require_once($class.'.php');
-			$class = new $class;
-			call_user_func_array([$class, $method], $args);
-		}
+		private function loadClass($callback, $args) {
+      $attrs = explode('::', $callback);
+      $classNamespace = str_replace('/', '\\', $attrs[0]);
+      $method = $attrs[1];
+      $class = new $classNamespace;
 
-		private function namespacePrev($namespace){
-			$namespace = explode('/', $namespace);
-			array_pop($namespace);
-			return implode('/', $namespace);
-		}
+      call_user_func_array([$class, $method], $args);
+    }
 	}
 ?>
