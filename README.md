@@ -72,7 +72,7 @@ $router -> group('/admin', function($router){
   return false;
 });
 ```
-Guard can be a Class, boolean and function
+Guard can be a class, boolean and function
 ```
 -> guard('Namespace/Class::method');
 -> guard(false);
