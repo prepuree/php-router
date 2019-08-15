@@ -2,6 +2,7 @@
 	class Router {
 		private $methods = ['get', 'post', 'put', 'delete'];
 		private $routes = [];
+		private $status;
 		private $lastGroupNamespace;
 		private $namespace;
 		private $patterns = [
@@ -60,9 +61,26 @@
 					return;
 				}
       }
-      
-			http_response_code(404);
-    }
+			
+			$this -> checkStatus('404');
+		}
+		
+		private function checkStatus($key) {
+			$status = $this -> status;
+			if(array_key_exists($key, $status)) {
+				if(is_callable($status[$key])) {
+					call_user_func($status[$key]);
+				} else if(is_string($status[$key])) {
+					$this -> loadClass($status[$key]);
+				}
+			} else {
+				http_response_code($key);
+			}
+		}
+
+		public function status($key, $callback) {
+			$this -> status[$key] = $callback;
+		}
     
 		private function addRoute($method, $url, $callback) {
 			array_push($this -> routes, [
@@ -95,7 +113,7 @@
 				elseif(is_callable($route['callback']))
 					call_user_func_array($route['callback'], $args);
 			} else {
-				http_response_code(403);
+				$this -> checkStatus(403);
 			}
     }
 
@@ -108,4 +126,3 @@
       call_user_func_array([$class, $method], $args);
     }
 	}
-?>
