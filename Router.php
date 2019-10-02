@@ -123,6 +123,6 @@
       $method = $attrs[1];
       $class = new $classNamespace;
 
-      call_user_func_array([$class, $method], $args);
+      return call_user_func_array([$class, $method], $args);
     }
 	}
